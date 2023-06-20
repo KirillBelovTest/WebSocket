@@ -243,7 +243,7 @@ encodeFrame[StringToByteArray[message]];
 
 WebSocketHandler /: encodeFrame[handler_WebSocketHandler, expr_] := 
 Module[{serializer}, 
-	serializer = handler["Serializer"]
+	serializer = handler["Serializer"]; 
 	
 	(*Return: ByteArray[]*)
 	encodeFrame[serializer[expr]]
