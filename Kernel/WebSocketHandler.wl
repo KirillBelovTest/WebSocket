@@ -67,7 +67,7 @@ WebSocketHandler::usage =
 Begin["`Private`"]; 
 
 
-WebSocketPacketQ[client_SocketObject, message_ByteArray] :=  
+WebSocketPacketQ[client_SocketObject, message_ByteArray] := 
 frameQ[client, message] || handshakeQ[client, message]; 
 
 
@@ -79,7 +79,10 @@ If[frameQ[client, message],
 
 
 WebSocketSend[client_SocketObject, message: _String | _ByteArray] := 
-WriteString[client, encodeFrame[message]]; 
+Switch[message, 
+	_String, WriteString[client, encodeFrame[message]];, 
+	_ByteArray, BinaryWrite[client, encodeFrame[message]];
+]; 
 
 
 WebSocketHandler /: WebSocketSend[handler_WebSocketHandler, client_SocketObject, message_] := 
@@ -88,13 +91,10 @@ WebSocketSend[client, encodeFrame[handler, message]];
 
 CreateType[WebSocketHandler, {
 	"MessageHandler" -> <||>, 
-	"DefaultMessageHandler" -> $defaultMessageHandler, 
-	
-	(*Input: <|.., "Data" -> ByteArray[]|>*)
-	"Deserializer" -> $deserializer, 
-
-	(*Return: ByteArray[]*)
-	"Serializer" -> $serializer
+	"DefaultMessageHandler" -> $defaultMessageHandler, 	
+	"Deserializer" -> $deserializer, (*Input: <|.., "Data" -> ByteArray[]|>*)
+	"Serializer" -> $serializer, (*Return: ByteArray[]*)
+	"Connections" -> {}
 }]; 
 
 
@@ -102,14 +102,14 @@ handler_WebSocketHandler[client_SocketObject, message_ByteArray] :=
 Module[{deserializer, serializer, messageHandler, defaultMessageHandler, frame, data, result}, 
 	deserializer = handler["Deserializer"]; 
 	serializer = handler["Serializer"]; 
-	
+
 	Which[
 		(*Return: Null*)
 		closeQ[client, message], 
 			Close[client]; 
-			DeleteCases[$connections, client], 
+			DeleteCases[$connections, client]; , 
 
-		(*Return: _String | ByteArray[] | Null*)
+		(*Return: Null*)
 		frameQ[client, message], 
 			frame = decodeFrame[message, deserializer]; 
 			data = frame["Data"]; 
@@ -117,8 +117,7 @@ Module[{deserializer, serializer, messageHandler, defaultMessageHandler, frame, 
 			messageHandler = handler["MessageHandler"]; 
 			defaultMessageHandler = handler["DefaultMessageHandler"]; 
 			
-			result = ConditionApply[messageHandler, defaultMessageHandler][client, data]; 
-			If[result != Null, encodeFrame[serializer[result]], Null], 
+			ConditionApply[messageHandler, defaultMessageHandler][client, data];, 
 
 		(*Return: _String*)
 		handshakeQ[client, message], 
@@ -149,15 +148,17 @@ $deserializer = #&;
 $serializer = ExportByteArray[#, "Text"]&; 
 
 
+$directory = DirectoryName[$InputFileName, 2]; 
+
+
 handshakeQ[client_SocketObject, message_ByteArray] := 
 Module[{head}, 
-
 	(*Return: True | False*)
 	If[frameQ[client, message], 
 		False, 
 	(*Else*)
-		head = ByteArrayToString[ByteArraySplit[message, $httpEndOfHead -> 1][[1]]]; 
-	
+		head = ByteArrayToString[BytesSplit[message, $httpEndOfHead -> 1][[1]]]; 
+
 		Length[message] != StringLength[head] && 
 		StringContainsQ[head, StartOfString ~~ "GET /"] && 
 		StringContainsQ[head, StartOfLine ~~ "Upgrade: websocket"]
@@ -179,7 +180,7 @@ handshake[client_SocketObject, message_ByteArray] :=
 Module[{messageString, key, acceptKey}, 
 	messageString = ByteArrayToString[message]; 
 	$connections = DeleteDuplicates[Append[$connections, client]]; 
-
+	
 	key = StringExtract[messageString, "Sec-WebSocket-Key: " -> 2, "\r\n" -> 1]; 
 	acceptKey = createAcceptKey[key]; 
 
@@ -212,11 +213,13 @@ Module[{length},
 
 encodeFrame[message_ByteArray] := 
 Module[{byte1, fin, opcode, length, mask, lengthBytes}, 
-	fin = 1; 
+	fin = {1}; 
 	
-	opcode = 2; 
-	
-	byte1 = Prepend[IntegerDigits[opcode, 2, 7], fin]; 
+	received = {0, 0, 0}; 
+
+	opcode = IntegerDigits[1, 2, 4]; 
+
+	byte1 = ByteArray[{FromDigits[Join[fin, received, opcode], 2]}]; 
 
 	length = Length[message]; 
 
@@ -230,7 +233,7 @@ Module[{byte1, fin, opcode, length, mask, lengthBytes},
 	]; 
 
 	(*Return: _ByteArray*)
-	Join[byte1, lengthBytes, message]
+	ByteArray[Join[byte1, lengthBytes, message]]
 ]; 
 
 
@@ -239,20 +242,22 @@ encodeFrame[StringToByteArray[message]];
 
 
 WebSocketHandler /: encodeFrame[handler_WebSocketHandler, expr_] := 
-Module[{serializer = handler["Serializer"]}, 
-	(*Return: _String | ByteArray[]*)
+Module[{serializer}, 
+	serializer = handler["Serializer"]
+	
+	(*Return: ByteArray[]*)
 	encodeFrame[serializer[expr]]
 ]; 
 
 
-decodeFrame[message_ByteArray] := 
+decodeFrame[message_ByteArray, deserializer_] := 
 Module[{header, payload, data}, 
 	header = getFrameHeader[message]; 
 	payload = message[[header["PayloadPosition"]]]; 
 	data = If[Length[header["MaskingKey"]] == 4, ByteArray[unmask[header["MaskingKey"], payload]], payload]; 
 
 	(*Return: _Association*)
-	Append[header, "Data" -> data]
+	Append[header, "Data" -> deserializer[data]]
 ]; 
 
 
@@ -304,7 +309,8 @@ unmask := unmask = PreCompile["unmask",
 	}, 
 		(*Return: PacketArray::[MachineInteger, 1]*)
 		Table[BitXor[payload[[i]], maskingKey[[Mod[i - 1, 4] + 1]]], {i, 1, Length[payload]}]
-	]]
+	]], 
+	$directory
 ]; 
 
 
