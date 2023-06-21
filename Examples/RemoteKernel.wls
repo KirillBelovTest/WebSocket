@@ -13,17 +13,25 @@ tcp["MessageHandler", "WebSocket"]  = WebSocketPacketQ -> ws
 ws = WebSocketHandler[]
 ws["MessageHandler", "Evaluate"]  = Function[True] -> evaluate
 
+kernel = LaunchKernels[1][[1]]
+
+evaluateAndSend[client_SocketObject, data_ByteArray] := 
+Module[{code, result, ejson}, 
+	code = ByteArrayToString[data]; 
+	result = ToExpression[code]; 
+	ejson = ExportByteArray[result, "ExpressionJSON"]; 
+	WebSocketSend[client, ejson]; 
+]
+
+
+DistributeDefinitions[evaluateAndSend]
+
+
+ParallelEvaluate[Language`ExtendedFullDefinition[] = #]& @ Language`ExtendedFullDefinition[evaluateAndSend]
+
+
 evaluate = Function[
-	WebSocketSend[
-		#1, 
-		ExportByteArray[
-			Echo[
-				ToExpression[ByteArrayToString[#2]], 
-				"Result"
-			], 
-			"ExpressionJSON"
-		]
-	]
+	ParallelEvaluate[SessionSubmit[evaluateAndSend[#1, #2]], kernel]
 ]
 
 listener = SocketListen[8000, tcp@#&]
