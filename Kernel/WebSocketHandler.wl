@@ -302,15 +302,14 @@ Module[{byte1, byte2, fin, opcode, mask, len, maskingKey, nextPosition, payload,
 ]; 
 
 
-unmask := unmask = PreCompile["unmask", 
+unmask := unmask = PreCompile[{$directory, "unmask"}, 
 	FunctionCompile[Function[{
 		Typed[maskingKey, "NumericArray"::["MachineInteger", 1]], 
 		Typed[payload, "NumericArray"::["MachineInteger", 1]]
 	}, 
 		(*Return: PacketArray::[MachineInteger, 1]*)
 		Table[BitXor[payload[[i]], maskingKey[[Mod[i - 1, 4] + 1]]], {i, 1, Length[payload]}]
-	]], 
-	$directory
+	]]
 ]; 
 
 

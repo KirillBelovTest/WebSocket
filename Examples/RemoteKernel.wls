@@ -31,7 +31,7 @@ ParallelEvaluate[Language`ExtendedFullDefinition[] = #]& @ Language`ExtendedFull
 
 
 evaluate = Function[
-	ParallelEvaluate[SessionSubmit[evaluateAndSend[#1, #2]], kernel]
+	evaluateAndSend[#1, #2]
 ]
 
 listener = SocketListen[8000, tcp@#&]
