@@ -7,22 +7,22 @@ PacletObject[
     "Creator" -> "Kirill Belov",
     "License" -> "MIT",
     "PublisherID" -> "KirillBelov",
-    "Version" -> "1.0.3",
+    "Version" -> "1.0.4",
     "WolframVersion" -> "13+",
     "Extensions" -> {
       {
         "Kernel",
         "Root" -> "Kernel",
         "Context" -> {
-          {"KirillBelov`WebSocketHandler`", "WebSocketHandler.wl"}
+          {
+            "KirillBelov`WebSocketHandler`",
+            "WebSocketHandler.wl"
+          }
         },
         "Symbols" -> {}
       },
       {"Documentation", "Language" -> "English"},
-      {
-            "LibraryLink",
-            "Root" -> "LibraryResources"
-      },
+      {"LibraryLink", "Root" -> "LibraryResources"},
       {
         "Asset",
         "Assets" -> {
