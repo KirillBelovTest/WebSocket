@@ -116,8 +116,6 @@ Module[{connections, deserializer, messageHandler, defaultMessageHandler, frame,
 		(*Return: Null*)
 		frameQ[client, message], 
 			frame = decodeFrame[message]; 
-			Print["FRAME"]; 
-			Print[frame]; 
 			buffer = handler["Buffer"]; 
 
 			If[
