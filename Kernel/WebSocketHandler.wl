@@ -67,12 +67,15 @@ WebSocketHandler::usage =
 Begin["`Private`"]; 
 
 
+ClearAll["`*"]
+
+
 WebSocketPacketQ[client_SocketObject, message_ByteArray] := 
-frameQ[client, message] || handshakeQ[client, message]; 
+(closeQ[client, message] || frameQ[client, message] || handshakeQ[client, message]); 
 
 
 WebSocketPacketLength[client_SocketObject, message_ByteArray] := 
-If[frameQ[client, message], 
+If[closeQ[client, message] || frameQ[client, message], 
 	getFrameLength[client, message], 
 	Length[message]
 ]; 
@@ -93,34 +96,47 @@ CreateType[WebSocketHandler, {
 	"MessageHandler" -> <||>, 
 	"DefaultMessageHandler" -> $defaultMessageHandler, 	
 	"Deserializer" -> $deserializer, (*Input: <|.., "Data" -> ByteArray[]|>*)
-	"Serializer" -> $serializer, (*Return: ByteArray[]*)
-	"Connections" -> {}
+	"Serializer" -> $serializer, (*Return: ByteArray[]*) 
+	"Connections" -> CreateDataStructure["HashSet"], 
+	"Buffer" -> CreateDataStructure["HashTable"]
 }]; 
 
 
 handler_WebSocketHandler[client_SocketObject, message_ByteArray] := 
-Module[{deserializer, serializer, messageHandler, defaultMessageHandler, frame, data, result}, 
+Module[{connections, deserializer, messageHandler, defaultMessageHandler, frame, buffer, data, expr}, 
+	connections = handler["Connections"]; 
 	deserializer = handler["Deserializer"]; 
-	serializer = handler["Serializer"]; 
-
 	Which[
 		(*Return: Null*)
 		closeQ[client, message], 
-			Close[client]; 
-			DeleteCases[$connections, client]; , 
+			$connection = Remove[$connection, client];
+			connections["Remove", client]; 
+			Close[client];, 
 
 		(*Return: Null*)
 		frameQ[client, message], 
-			frame = decodeFrame[message, deserializer]; 
-			data = frame["Data"]; 
+			frame = decodeFrame[message]; 
+			Print["FRAME"]; 
+			Print[frame]; 
+			buffer = handler["Buffer"]; 
 
-			messageHandler = handler["MessageHandler"]; 
-			defaultMessageHandler = handler["DefaultMessageHandler"]; 
-			
-			ConditionApply[messageHandler, defaultMessageHandler][client, data];, 
+			If[
+				frame["Fin"], 
+					deserializer = handler["Deserializer"]; 
+					data = dropBuffer[buffer, client, frame]; 
+					expr = deserializer[data]; 
+					messageHandler = handler["MessageHandler"]; 
+					defaultMessageHandler = handler["DefaultMessageHandler"]; 
+					ConditionApply[messageHandler, defaultMessageHandler][client, expr];, 
+
+				(*Else*) 
+					saveFrameToBuffer[buffer, client, frame]; 
+			];, 
 
 		(*Return: _String*)
 		handshakeQ[client, message], 
+			connections["Insert", client]; 
+			$connections[client] = connections; 
 			handshake[client, message]
 	]
 ]; 
@@ -131,9 +147,6 @@ Module[{deserializer, serializer, messageHandler, defaultMessageHandler, frame, 
 
 
 $guid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"; 
-
-
-$connections = {}; 
 
 
 $httpEndOfHead = StringToByteArray["\r\n\r\n"]; 
@@ -151,39 +164,49 @@ $serializer = ExportByteArray[#, "Text"]&;
 $directory = DirectoryName[$InputFileName, 2]; 
 
 
-handshakeQ[client_SocketObject, message_ByteArray] := 
-Module[{head}, 
-	(*Return: True | False*)
-	If[frameQ[client, message], 
-		False, 
-	(*Else*)
-		head = ByteArrayToString[BytesSplit[message, $httpEndOfHead -> 1][[1]]]; 
+$connections = <||>; 
 
-		Length[message] != StringLength[head] && 
-		StringContainsQ[head, StartOfString ~~ "GET /"] && 
-		StringContainsQ[head, StartOfLine ~~ "Upgrade: websocket"]
-	]
+
+getConnetionsByClient[client_SocketObject] := 
+$connections[client]; 
+
+
+handshakeQ[client_SocketObject, message_ByteArray] := 
+Module[{head, connections}, 
+	head = ByteArrayToString[BytesSplit[message, $httpEndOfHead -> 1][[1]]]; 
+	connections = getConnetionsByClient[client]; 
+
+	(*Return: True | False*)
+	(!DataStructureQ[connections] || !connections["MemberQ", client]) && 
+	Length[message] != StringLength[head] && 
+	StringContainsQ[head, StartOfString ~~ "GET /"] && 
+	StringContainsQ[head, StartOfLine ~~ "Upgrade: websocket"]
 ]; 
 
 
 frameQ[client_SocketObject, message_ByteArray] := 
-(*Return: True | False*)
-MemberQ[$connections, client]; 
+Module[{connections}, 
+	connections = getConnetionsByClient[client]; 
+	(*Return: True | False*)
+	DataStructureQ[connections] && connections["MemberQ", client]
+]; 
 
 
 closeQ[client_SocketObject, message_ByteArray] := 
-(*Return: True | False*)
-FromDigits[IntegerDigits[message[[1]], 2, 8][[2 ;; ]], 2] == 8; 
+Module[{connections}, 
+	connections = getConnetionsByClient[client]; 
+
+	(*Return: True | False*)
+	connections["MemberQ", client] && 
+	FromDigits[IntegerDigits[message[[1]], 2, 8][[2 ;; ]], 2] == 8
+]; 
 
 
 handshake[client_SocketObject, message_ByteArray] := 
 Module[{messageString, key, acceptKey}, 
 	messageString = ByteArrayToString[message]; 
-	$connections = DeleteDuplicates[Append[$connections, client]]; 
-	
 	key = StringExtract[messageString, "Sec-WebSocket-Key: " -> 2, "\r\n" -> 1]; 
 	acceptKey = createAcceptKey[key]; 
-
 	(*Return: _String*)
 	"HTTP/1.1 101 Switching Protocols\r\n" <> 
 	"Connection: upgrade\r\n" <> 
@@ -197,29 +220,15 @@ createAcceptKey[key_String] :=
 BaseEncode[Hash[key <> $guid, "SHA1", "ByteArray"], "Base64"]; 
 
 
-getFrameLength[client_SocketObject, message_ByteArray] := 
-Module[{length}, 
-	length = FromDigits[IntegerDigits[message[[2]], 2, 8][[2 ;; ]], 2]; 
-
-	Which[
-		length == 126, length = FromDigits[Normal[message[[3 ;; 4]]], 256], 
-		length == 127, length = FromDigits[Normal[message[[3 ;; 10]]], 256]
-	]; 
-
-	(*Return: _Integer*)
-	length
-]; 
-
-
 encodeFrame[message_ByteArray] := 
-Module[{byte1, fin, opcode, length, mask, lengthBytes}, 
+Module[{byte1, fin, opcode, length, mask, lengthBytes, reserved}, 
 	fin = {1}; 
 	
-	received = {0, 0, 0}; 
+	reserved = {0, 0, 0}; 
 
 	opcode = IntegerDigits[1, 2, 4]; 
 
-	byte1 = ByteArray[{FromDigits[Join[fin, received, opcode], 2]}]; 
+	byte1 = ByteArray[{FromDigits[Join[fin, reserved, opcode], 2]}]; 
 
 	length = Length[message]; 
 
@@ -250,14 +259,28 @@ Module[{serializer},
 ]; 
 
 
-decodeFrame[message_ByteArray, deserializer_] := 
+decodeFrame[message_ByteArray] := 
 Module[{header, payload, data}, 
 	header = getFrameHeader[message]; 
 	payload = message[[header["PayloadPosition"]]]; 
 	data = If[Length[header["MaskingKey"]] == 4, ByteArray[unmask[header["MaskingKey"], payload]], payload]; 
-
 	(*Return: _Association*)
-	Append[header, "Data" -> deserializer[data]]
+	Append[header, "Data" -> data]
+]; 
+
+
+getFrameLength[client_SocketObject, message_ByteArray] := 
+Module[{length}, 
+	length = FromDigits[IntegerDigits[message[[2]], 2, 8][[2 ;; ]], 2]; 
+
+	Which[
+		length == 126, length = FromDigits[Normal[message[[3 ;; 4]]], 256] + 8, 
+		length == 127, length = FromDigits[Normal[message[[3 ;; 10]]], 256] + 14, 
+		True, length = length + 6
+	]; 
+
+	(*Return: _Integer*)
+	length
 ]; 
 
 
@@ -310,6 +333,38 @@ unmask := unmask = PreCompile[{$directory, "unmask"},
 		(*Return: PacketArray::[MachineInteger, 1]*)
 		Table[BitXor[payload[[i]], maskingKey[[Mod[i - 1, 4] + 1]]], {i, 1, Length[payload]}]
 	]]
+]; 
+
+
+saveFrameToBuffer[buffer_DataStructure, client: SocketObject[uuid_String], frame_] := 
+Module[{clientBuffer}, 
+	If[buffer["KeyExistsQ", uuid], 
+		clientBuffer = buffer["Lookup", uuid]; 
+		clientBuffer["Append", frame]; , 
+	(*Else*)
+		clientBuffer = CreateDataStructure["DynamicArray", {frame}]; 
+		buffer["Insert", uuid -> clientBuffer]; 
+	];  
+]; 
+
+
+dropBuffer[buffer_DataStructure, client: SocketObject[uuid_String], frame_] := 
+Module[{fragments, clientBuffer}, 
+	If[buffer["KeyExistsQ", uuid], 
+		clientBuffer = buffer["Lookup", uuid]; 
+		If[clientBuffer["Length"] > 0, 
+			fragments = Append[clientBuffer["Elements"], frame][[All, "Data"]]; 
+			clientBuffer["DropAll"]; 
+			(*Return: ByteArray[]*)
+			Apply[Join, fragments], 
+		(*Else*)
+			(*Return: ByteArray[]*)
+			frame["Data"]
+		], 
+	(*Else*)
+		(*Return: ByteArray[]*)
+		frame["Data"]
+	]
 ]; 
 
 
