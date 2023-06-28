@@ -5,29 +5,38 @@
 
 
 (* ::Program:: *)
-(*+-------------------------------------------------+*)
-(*|              WEBSSOCKET HANDLER                 |*)
-(*|                                                 |*)
-(*|               (reseive message)                 |*)
-(*|                       |                         |*)
-(*|              <check message type>               |*)
-(*|             /         |          \              |*)
-(*|  [handshake]       [frame]        [close frame] |*)
-(*|      |                |                 |       |*)
-(*| [send accept]     [decode]           {close}    |*)
-(*|      |                |                         |*)
-(*|   {to tcp}      [deserialize]                   |*)
-(*|                       |                         |*)
-(*|                <select pipeline>                |*)
-(*|      /        /                 \       \       |*)
-(*|    ..    [callback]         [subscribe]  ..     |*)
-(*|                  \            /                 |*)
-(*|                   <check type>                  |*)
-(*|             null /            \ data            |*)
-(*|            {next}            [serialize]        |*)
-(*|                                   |             |*)
-(*|                                {to tcp}         |*)
-(*+-------------------------------------------------+*)
+(*+---------------------------------------------------+*)
+(*|               WEBSSOCKET HANDLER                  |*)
+(*|                                                   |*)
+(*|                (reseive message)                  |*)
+(*|                        |                          |*)
+(*|               <check message type>                |*)
+(*|              /         |          \               |*)
+(*|   [handshake]       [frame]        [close frame]  |*)
+(*|       |                |                 |        |*)
+(*|  [send accept]     [decode]           {close}     |*)
+(*|       |                |                          |*)
+(*|    {to tcp}      [deserialize]                    |*)
+(*|                        |                          |*)
+(*|                 <select pipeline>                 |*)
+(*|       /        /                 \       \        |*)
+(*|     ..    [callback]         [subscribe]  ..      |*)
+(*|                   \            /                  |*)
+(*|                    <check type>                   |*)
+(*|              null /            \ data             |*)
+(*|             {next}            [serialize]         |*)
+(*|                                    |              |*)
+(*|                                 {to tcp}          |*)
+(*+---------------------------------------------------+*)
+
+
+(*::Section::Close::*)
+(*Requarements*)
+
+
+Once[PacletInstall["KirillBelov`Internal`"]]; 
+Once[PacletInstall["KirillBelov`Objects`"]]; 
+Once[PacletInstall["KirillBelov`TCPServer`"]]; 
 
 
 (*::Section::Close::*)
