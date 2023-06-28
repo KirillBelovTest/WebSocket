@@ -71,11 +71,11 @@ ClearAll["`*"]
 
 
 WebSocketPacketQ[client_SocketObject, message_ByteArray] := 
-(closeQ[client, message] || frameQ[client, message] || handshakeQ[client, message]); 
+(frameQ[client, message] || handshakeQ[client, message]); 
 
 
 WebSocketPacketLength[client_SocketObject, message_ByteArray] := 
-If[closeQ[client, message] || frameQ[client, message], 
+If[frameQ[client, message], 
 	getFrameLength[client, message], 
 	Length[message]
 ]; 
@@ -109,9 +109,13 @@ Module[{connections, deserializer, messageHandler, defaultMessageHandler, frame,
 	Which[
 		(*Return: Null*)
 		closeQ[client, message], 
-			$connection = Remove[$connection, client];
+			$connections = Delete[$connections, Key[client]];
 			connections["Remove", client]; 
 			Close[client];, 
+
+		(*Return: ByteArray*)
+		pingQ[client, message], 
+			pong[client, message], 
 
 		(*Return: Null*)
 		frameQ[client, message], 
@@ -121,7 +125,7 @@ Module[{connections, deserializer, messageHandler, defaultMessageHandler, frame,
 			If[
 				frame["Fin"], 
 					deserializer = handler["Deserializer"]; 
-					data = dropBuffer[buffer, client, frame]; 
+					data = getDataAndDropBuffer[buffer, client, frame]; 
 					expr = deserializer[data]; 
 					messageHandler = handler["MessageHandler"]; 
 					defaultMessageHandler = handler["DefaultMessageHandler"]; 
@@ -166,13 +170,15 @@ $connections = <||>;
 
 
 getConnetionsByClient[client_SocketObject] := 
+(*Return: DataStructure[HashSet]*)
 $connections[client]; 
 
 
 handshakeQ[client_SocketObject, message_ByteArray] := 
 Module[{head, connections}, 
-	head = ByteArrayToString[BytesSplit[message, $httpEndOfHead -> 1][[1]]]; 
+	(*Result: DataStructure[HashSet]*)
 	connections = getConnetionsByClient[client]; 
+	head = ByteArrayToString[BytesSplit[message, $httpEndOfHead -> 1][[1]]]; 
 
 	(*Return: True | False*)
 	(!DataStructureQ[connections] || !connections["MemberQ", client]) && 
@@ -184,7 +190,9 @@ Module[{head, connections},
 
 frameQ[client_SocketObject, message_ByteArray] := 
 Module[{connections}, 
-	connections = getConnetionsByClient[client]; 
+	(*Result: DataStructure[HashSet]*)
+	connections = getConnetionsByClient[client];
+
 	(*Return: True | False*)
 	DataStructureQ[connections] && connections["MemberQ", client]
 ]; 
@@ -192,11 +200,32 @@ Module[{connections},
 
 closeQ[client_SocketObject, message_ByteArray] := 
 Module[{connections}, 
+	(*Result: DataStructure[HashSet]*)
 	connections = getConnetionsByClient[client]; 
 
 	(*Return: True | False*)
 	connections["MemberQ", client] && 
 	FromDigits[IntegerDigits[message[[1]], 2, 8][[2 ;; ]], 2] == 8
+]; 
+
+
+pingQ[client_SocketObject, message_ByteArray] := 
+Module[{connections}, 
+	(*Result: DataStructure[HashSet]*)
+	connections = getConnetionsByClient[client]; 
+
+	connections["MemberQ", client] && 
+	FromDigits[IntegerDigits[message[[1]], 2, 8][[2 ;; ]], 2] == 9
+]; 
+
+
+pong[client_SocketObject, message_ByteArray] := 
+Module[{firstByte}, 
+	firstByte = IntegerDigits[message[[1]], 2, 8]; 
+	firstByte[[5 ;; 8]] = {1, 0, 1, 0}; 
+
+	(*Return: ByteArray*)
+	Join[ByteArray[{FromDigits[firstByte, 2]}], message[[2 ;; ]]]
 ]; 
 
 
@@ -342,11 +371,12 @@ Module[{clientBuffer},
 	(*Else*)
 		clientBuffer = CreateDataStructure["DynamicArray", {frame}]; 
 		buffer["Insert", uuid -> clientBuffer]; 
-	];  
+	]; 
+	(*Return: Null*)
 ]; 
 
 
-dropBuffer[buffer_DataStructure, client: SocketObject[uuid_String], frame_] := 
+getDataAndDropBuffer[buffer_DataStructure, client: SocketObject[uuid_String], frame_] := 
 Module[{fragments, clientBuffer}, 
 	If[buffer["KeyExistsQ", uuid], 
 		clientBuffer = buffer["Lookup", uuid]; 
