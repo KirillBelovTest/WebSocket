@@ -31,15 +31,6 @@
 
 
 (*::Section::Close::*)
-(*Requarements*)
-
-
-Once[PacletInstall["KirillBelov`Internal`"]]; 
-Once[PacletInstall["KirillBelov`Objects`"]]; 
-Once[PacletInstall["KirillBelov`TCPServer`"]]; 
-
-
-(*::Section::Close::*)
 (*Begin package*)
 
 
@@ -115,6 +106,7 @@ handler_WebSocketHandler[client_SocketObject, message_ByteArray] :=
 Module[{connections, deserializer, messageHandler, defaultMessageHandler, frame, buffer, data, expr}, 
 	connections = handler["Connections"]; 
 	deserializer = handler["Deserializer"]; 
+	Print[ByteArrayToString[message]]; 
 	Which[
 		(*Return: Null*)
 		closeQ[client, message], 
@@ -242,12 +234,14 @@ handshake[client_SocketObject, message_ByteArray] :=
 Module[{messageString, key, acceptKey}, 
 	messageString = ByteArrayToString[message]; 
 	key = StringExtract[messageString, "Sec-WebSocket-Key: " -> 2, "\r\n" -> 1]; 
+	Print[key];
 	acceptKey = createAcceptKey[key]; 
-	(*Return: _String*)
-	"HTTP/1.1 101 Switching Protocols\r\n" <> 
-	"Connection: upgrade\r\n" <> 
-	"Upgrade: websocket\r\n" <> 
-	"Sec-WebSocket-Accept: " <> acceptKey <> "\r\n\r\n"
+	(*Return: ByteArray[]*)
+	StringToByteArray["HTTP/1.1 101 Switching Protocols\r\n" <> 
+	"connection: upgrade\r\n" <> 
+	"upgrade: websocket\r\n" <> 
+	"content-type: text/html;charset=UTF-8\r\n" <> 
+	"sec-websocket-accept: " <> acceptKey <> "\r\n\r\n"]
 ]; 
 
 
@@ -325,7 +319,7 @@ Module[{byte1, byte2, fin, opcode, mask, len, maskingKey, nextPosition, payload,
 	byte1 = IntegerDigits[message[[1]], 2, 8]; 
 	byte2 = IntegerDigits[message[[2]], 2, 8]; 
 
-	fin = byte1[[1]] == 1; 
+	fin = byte1[[1]] === 1; 
 	opcode = Switch[FromDigits[byte1[[2 ;; ]], 2], 
 		1, "Part", 
 		2, "Text", 
@@ -333,7 +327,7 @@ Module[{byte1, byte2, fin, opcode, mask, len, maskingKey, nextPosition, payload,
 		8, "Close"
 	]; 
 
-	mask = byte2[[1]] == 1; 
+	mask = byte2[[1]] === 1; 
 
 	len = FromDigits[byte2[[2 ;; ]], 2]; 
 

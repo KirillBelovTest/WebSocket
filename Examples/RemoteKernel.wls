@@ -1,7 +1,6 @@
 #!/usr/bin/env wolframscript
 (* ::Package:: *)
 
-If[PacletFind["KirillBelov/WebSocketHandler"] === {}, PacletInstall["KirillBelov/WebSocketeHandler"]]
 Get["KirillBelov`TCPServer`"]
 Get["KirillBelov`WebSocketHandler`"]
 
