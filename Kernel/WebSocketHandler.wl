@@ -106,7 +106,6 @@ handler_WebSocketHandler[client_SocketObject, message_ByteArray] :=
 Module[{connections, deserializer, messageHandler, defaultMessageHandler, frame, buffer, data, expr}, 
 	connections = handler["Connections"]; 
 	deserializer = handler["Deserializer"]; 
-	Print[ByteArrayToString[message]]; 
 	Which[
 		(*Return: Null*)
 		closeQ[client, message], 
@@ -234,7 +233,6 @@ handshake[client_SocketObject, message_ByteArray] :=
 Module[{messageString, key, acceptKey}, 
 	messageString = ByteArrayToString[message]; 
 	key = StringExtract[messageString, "Sec-WebSocket-Key: " -> 2, "\r\n" -> 1]; 
-	Print[key];
 	acceptKey = createAcceptKey[key]; 
 	(*Return: ByteArray[]*)
 	StringToByteArray["HTTP/1.1 101 Switching Protocols\r\n" <> 
