@@ -56,6 +56,10 @@ WebSocketSend::uasge =
 "WebSocketSend[client, message] send message via WebSocket protocol."; 
 
 
+WebSocketChannel::usage = 
+"WebSocketChannel[name] multiple client connection."; 
+
+
 WebSocketHandler::usage = 
 "WebSocketHandler[opts] handle messages received via WebSocket protocol."; 
 
@@ -67,7 +71,7 @@ WebSocketHandler::usage =
 Begin["`Private`"]; 
 
 
-ClearAll["`*"]
+ClearAll["`*"]; 
 
 
 WebSocketPacketQ[client_SocketObject, message_ByteArray] := 
@@ -88,17 +92,70 @@ Switch[message,
 ]; 
 
 
-WebSocketHandler /: WebSocketSend[handler_WebSocketHandler, client_SocketObject, message_] := 
-WebSocketSend[client, encodeFrame[handler, message]]; 
+CreateType[WebSocketChannel, init, {
+	"Name", 
+	"Serializer" -> $serializer, 
+	"Connections"
+}]; 
 
 
-CreateType[WebSocketHandler, {
+WebSocketChannel[name_String, clients: {___SocketObject}: {}, serializer_: $serializer] := 
+Module[{channel, connections}, 
+	channel = WebSocketChannel["Name" -> name, "Serializer" -> serializer]; 
+	connections = channel["Connections"]; 
+	Map[connections["Insert", #]&, clients]; 
+
+	(*Return: WebSocketChannel[]*)
+	channel
+]; 
+
+
+WebSocketChannel /: Append[channel_WebSocketChannel, client_SocketObject] := 
+Module[{connections}, 
+	connections = channel["Connections"]; 
+	connections["Insert", client]; 
+
+	(*Return: WebSocketChannel[]*)
+	channel
+]; 
+
+
+WebSocketChannel /: Delete[channel_WebSocketChannel, client_SocketObject] := 
+Module[{connections}, 
+	connections = channel["Connections"]; 
+	connections["Delete", client]; 
+
+	(*Return: WebSocketChannel[]*)
+	channel
+]; 
+
+
+WebSocketChannel /: WebSocketSend[channel_WebSocketChannel, client_SocketObject, message: _String | _ByteArray] := 
+WebSocketSend[client, message]; 
+
+
+WebSocketChannel /: WebSocketSend[channel_WebSocketChannel, client_SocketObject, expr_] := 
+Module[{serializer, message}, 
+	serializer = channel["Serializer"]; 
+	message = serializer[expr]; 
+	WebSocketSend[channel, client, message]; 
+]; 
+
+
+WebSocketChannel /: WebSocketSend[channel_WebSocketChannel, expr_] := 
+Module[{connections}, 
+	connections = channel["Connections"]; 
+	Map[WebSocketSend[channel, #, expr]&, connections["Elements"]]; 
+]; 
+
+
+CreateType[WebSocketHandler, init, {
 	"MessageHandler" -> <||>, 
 	"DefaultMessageHandler" -> $defaultMessageHandler, 	
 	"Deserializer" -> $deserializer, (*Input: <|.., "Data" -> ByteArray[]|>*)
 	"Serializer" -> $serializer, (*Return: ByteArray[]*) 
-	"Connections" -> CreateDataStructure["HashSet"], 
-	"Buffer" -> CreateDataStructure["HashTable"]
+	"Connections", 
+	"Buffer"
 }]; 
 
 
@@ -144,6 +201,20 @@ Module[{connections, deserializer, messageHandler, defaultMessageHandler, frame,
 ]; 
 
 
+WebSocketHandler /: WebSocketSend[handler_WebSocketHandler, client_SocketObject, message_] := 
+WebSocketSend[client, encodeFrame[handler, message]]; 
+
+
+WebSocketHandler /: WebSocketChannel[handler_WebSocketHandler, name_String, clients: {___SocketObject}: {}] := 
+Module[{channel}, 
+	channel = WebSocketChannel[name, clients]; 
+	channel["Serializer"] := handler["Serializer"]; 
+
+	(*Return: WebSocketChannel[]*)
+	channel
+]; 
+
+
 (*::Section::Close::*)
 (*Internal*)
 
@@ -167,6 +238,16 @@ $directory = DirectoryName[$InputFileName, 2];
 
 
 $connections = <||>; 
+
+
+WebSocketHandler /: init[handler_WebSocketHandler] := (
+	handler["Connections"] = CreateDataStructure["HashSet"]; 
+	handler["Buffer"] = CreateDataStructure["HashTable"]; 
+);
+
+
+WebSocketChannel /: init[channel_WebSocketChannel] := 
+channel["Connections"] = CreateDataStructure["HashSet"]; 
 
 
 getConnetionsByClient[client_SocketObject] := 
