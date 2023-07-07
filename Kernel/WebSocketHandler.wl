@@ -85,8 +85,21 @@ If[frameQ[client, message],
 ]; 
 
 
+Options[WebSocketSend] = {
+	"Serializer" -> $serializer
+}
+
+
 WebSocketSend[client_SocketObject, message: _String | _ByteArray] := 
 BinaryWrite[client, encodeFrame[message]]; 
+
+
+WebSocketSend[client_SocketObject, expr_, OptionsPattern[]] := 
+Module[{serializer, message}, 
+	serializer = OptionValue["Serializer"]; 
+	message = serializer[expr]; 
+	WebSocketSend[client, message]
+]; 
 
 
 CreateType[WebSocketChannel, init, {
@@ -101,7 +114,7 @@ Module[{channel, connections},
 	channel = WebSocketChannel["Name" -> name, "Serializer" -> serializer]; 
 	connections = channel["Connections"]; 
 	Map[connections["Insert", #]&, clients]; 
-
+	Echo[connections//Normal, "Current subscriptions:"];
 	(*Return: WebSocketChannel[]*)
 	channel
 ]; 
