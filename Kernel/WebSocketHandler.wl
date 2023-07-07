@@ -114,7 +114,7 @@ Module[{channel, connections},
 	channel = WebSocketChannel["Name" -> name, "Serializer" -> serializer]; 
 	connections = channel["Connections"]; 
 	Map[connections["Insert", #]&, clients]; 
-	Echo[connections//Normal, "Current subscriptions:"];
+	
 	(*Return: WebSocketChannel[]*)
 	channel
 ]; 
@@ -125,6 +125,9 @@ Module[{connections},
 	connections = channel["Connections"]; 
 	connections["Insert", client]; 
 
+	Echo[client, "Added client:"];
+	Echo[connections//Normal, "Current subscriptions:"];
+
 	(*Return: WebSocketChannel[]*)
 	channel
 ]; 
@@ -134,6 +137,9 @@ WebSocketChannel /: Delete[channel_WebSocketChannel, client_SocketObject] :=
 Module[{connections}, 
 	connections = channel["Connections"]; 
 	connections["Delete", client]; 
+
+	Echo[client, "Deleted client:"];
+	Echo[connections//Normal, "Current subscriptions:"];
 
 	(*Return: WebSocketChannel[]*)
 	channel
