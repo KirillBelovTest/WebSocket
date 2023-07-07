@@ -86,10 +86,7 @@ If[frameQ[client, message],
 
 
 WebSocketSend[client_SocketObject, message: _String | _ByteArray] := 
-Switch[message, 
-	_String, WriteString[client, encodeFrame[message]];, 
-	_ByteArray, BinaryWrite[client, encodeFrame[message]];
-]; 
+BinaryWrite[client, encodeFrame[message]]; 
 
 
 CreateType[WebSocketChannel, init, {
@@ -131,7 +128,7 @@ Module[{connections},
 
 
 WebSocketChannel /: WebSocketSend[channel_WebSocketChannel, client_SocketObject, message: _String | _ByteArray] := 
-WebSocketSend[client, message]; 
+If[FailureQ[#], Delete[channel, client]]& @ WebSocketSend[client, message]; 
 
 
 WebSocketChannel /: WebSocketSend[channel_WebSocketChannel, client_SocketObject, expr_] := 
