@@ -26,11 +26,11 @@ RPKStart[port_Integer] :=
 Module[{link}, 
 	link = LinkLaunch[First[$CommandLine] <> " -wstp"]; 
 	LinkRead[link];
-	With[{definition = Language`ExtendedFullDefinition[createRemoteWebSocketKernel]}, 
+	With[{definition = Language`ExtendedFullDefinition[createWebSocketKernel]}, 
 		LinkWrite[link, Unevaluated[Function[Language`ExtendedFullDefinition[] = #][definition]]];
 		TimeConstrained[
 			While[!LinkReadyQ[link], Pause[0.001]]; 
-			LinkWrite[link, Unevaluated[createRemoteWebSocketKernel[port]]], 
+			LinkWrite[link, Unevaluated[createWebSocketKernel[port]]], 
 			10
 		]; 
 
@@ -47,14 +47,14 @@ If[KeyExistsQ[$links, port], Close[$links[port]; Delete[$links, Key[port]]]];
 $links = <||>; 
 
 
-remoteWebSocketKernelEvaluate[client_SocketObject, message_ByteArray] := 
+webSocketEvaluate[client_SocketObject, message_ByteArray] := 
 WebSocketSend[client, ExportByteArray[ImportByteArray[message, "WL"], "ExpressionJSON"]]; 
 
 
-createRemoteWebSocketKernel[port_Integer] := 
+createWebSocketKernel[port_Integer] := 
 Module[{ws, tcp}, 
 	ws = WebSocketHandler[]; 
-	ws["MessageHandler", "RemoteKernel"] = Function[True] -> remoteWebSocketKernelEvaluate; 
+	ws["MessageHandler", "RemoteKernel"] = Function[True] -> webSocketEvaluate; 
 	tcp = TCPServer[]; 
 	AddWebSocketHandler[tcp, ws]; 
 
