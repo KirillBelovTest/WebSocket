@@ -19,7 +19,7 @@ RPKReadyQ::usage =
 "RPKReadyQ[port] check that kernel is ready."; 
 
 
-Begin["`Private`"]
+Begin["`Private`"]; 
 
 
 RPKStart[port_Integer] := 
