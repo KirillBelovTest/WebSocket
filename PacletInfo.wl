@@ -17,6 +17,14 @@ PacletObject[
           {
             "KirillBelov`WebSocketHandler`",
             "WebSocketHandler.wl"
+          }, 
+          {
+            "KirillBelov`WebSocketHandler`Extensions`",
+            "Extensions.wl"
+          }, 
+          {
+            "KirillBelov`WebSocketHandler`RemoteParallelKernel`", 
+            "RemoteParallelKernel.wl"
           }
         },
         "Symbols" -> {}

@@ -44,6 +44,10 @@ BeginPackage["KirillBelov`WebSocketHandler`", {"KirillBelov`Internal`", "KirillB
 ClearAll["`*"]; 
 
 
+$CurrenctClient::usage = 
+"Current SocketObject."; 
+
+
 WebSocketPacketQ::usage = 
 "WebSocketPacketQ[client, packet] check that packet sent via WebSocket protocol."; 
 
@@ -177,6 +181,8 @@ CreateType[WebSocketHandler, init, {
 
 handler_WebSocketHandler[client_SocketObject, message_ByteArray] := 
 Module[{connections, deserializer, messageHandler, defaultMessageHandler, frame, buffer, data, expr}, 
+	$CurrenctClient = client; 
+
 	connections = handler["Connections"]; 
 	deserializer = handler["Deserializer"]; 
 	Which[
@@ -184,7 +190,7 @@ Module[{connections, deserializer, messageHandler, defaultMessageHandler, frame,
 		closeQ[client, message], 
 			$connections = Delete[$connections, Key[client]];
 			connections["Remove", client]; 
-			Close[client];, 
+			Map[Close, client["ConnectedClients"]];, 
 
 		(*Return: ByteArray*)
 		pingQ[client, message], 
@@ -331,6 +337,7 @@ Module[{messageString, key, acceptKey},
 	messageString = ByteArrayToString[message]; 
 	key = StringExtract[messageString, "Sec-WebSocket-Key: " -> 2, "\r\n" -> 1]; 
 	acceptKey = createAcceptKey[key]; 
+	
 	(*Return: ByteArray[]*)
 	StringToByteArray["HTTP/1.1 101 Switching Protocols\r\n" <> 
 	"connection: upgrade\r\n" <> 
