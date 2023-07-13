@@ -28,10 +28,11 @@ Module[{link},
 	LinkRead[link];
 	With[{definition = Language`ExtendedFullDefinition[createRemoteWebSocketKernel]}, 
 		LinkWrite[link, Unevaluated[Function[Language`ExtendedFullDefinition[] = #][definition]]];
-		TimeConstrained[While[!LinkReadyQ[link], Pause[0.001]], 10]; 
-		If[LinkReadyQ[link], LinkRead[link]]; 
-		LinkWrite[link, Unevaluated[listener = createRemoteWebSocketKernel[port]]]; 
-		LinkRead[link]; 
+		TimeConstrained[
+			While[!LinkReadyQ[link], Pause[0.001]]; 
+			LinkWrite[link, Unevaluated[createRemoteWebSocketKernel[port]]], 
+			10
+		]; 
 
 		(*Return: LinkObject*)
 		$links[port] = link
