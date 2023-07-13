@@ -30,7 +30,10 @@ Module[{link},
 		LinkWrite[link, Unevaluated[Function[Language`ExtendedFullDefinition[] = #][definition]]];
 		TimeConstrained[
 			While[!LinkReadyQ[link], Pause[0.001]]; 
-			LinkWrite[link, Unevaluated[createWebSocketKernel[port]]], 
+			LinkRead[link]; 
+			LinkWrite[link, Unevaluated[createWebSocketKernel[port]]]; 
+			While[!LinkReadyQ[link], Pause[0.001]]; 
+			LinkRead[link];, 
 			10
 		]; 
 
