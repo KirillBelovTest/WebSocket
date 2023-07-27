@@ -34,7 +34,7 @@
 (*Begin package*)
 
 
-BeginPackage["KirillBelov`WebSocketHandler`", {"KirillBelov`Internal`", "KirillBelov`Objects`"}]; 
+BeginPackage["KirillBelov`WebSocketHandler`", {"KirillBelov`Internal`", "KirillBelov`Objects`", "KirillBelov`CSocketListener`"}]; 
 
 
 (*::Section::Close::*)
