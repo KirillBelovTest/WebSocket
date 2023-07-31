@@ -140,7 +140,7 @@ Module[{connections},
 WebSocketChannel /: Delete[channel_WebSocketChannel, client: _SocketObject | _CSocket] := 
 Module[{connections}, 
 	connections = channel["Connections"]; 
-	connections["Delete", client]; 
+	connections["Remove", client]; 
 
 	Echo[client, "Deleted client:"];
 	Echo[connections//Normal, "Current subscriptions:"];
