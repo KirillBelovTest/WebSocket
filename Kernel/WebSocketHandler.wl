@@ -34,7 +34,7 @@
 (*Begin package*)
 
 
-BeginPackage["KirillBelov`WebSocketHandler`", {"KirillBelov`Internal`", "KirillBelov`Objects`", "KirillBelov`CSocketListener`"}]; 
+BeginPackage["KirillBelov`WebSocketHandler`", {"KirillBelov`Internal`", "KirillBelov`Objects`", "KirillBelov`CSockets`"}]; 
 
 
 (*::Section::Close::*)
@@ -78,11 +78,11 @@ Begin["`Private`"];
 ClearAll["`*"]; 
 
 
-WebSocketPacketQ[client: _SocketObject | _CSocket, message_ByteArray] := 
+WebSocketPacketQ[client: _SocketObject | _CSocketObject, message_ByteArray] := 
 (frameQ[client, message] || handshakeQ[client, message]); 
 
 
-WebSocketPacketLength[client: _SocketObject | _CSocket, message_ByteArray] := 
+WebSocketPacketLength[client: _SocketObject | _CSocketObject, message_ByteArray] := 
 If[frameQ[client, message], 
 	getFrameLength[client, message], 
 	Length[message]
@@ -94,11 +94,11 @@ Options[WebSocketSend] = {
 }
 
 
-WebSocketSend[client: _SocketObject | _CSocket, message: _String | _ByteArray] := 
+WebSocketSend[client: _SocketObject | _CSocketObject, message: _String | _ByteArray] := 
 BinaryWrite[client, encodeFrame[message]]; 
 
 
-WebSocketSend[client: _SocketObject | _CSocket, expr_, OptionsPattern[]] := 
+WebSocketSend[client: _SocketObject | _CSocketObject, expr_, OptionsPattern[]] := 
 Module[{serializer, message}, 
 	serializer = OptionValue["Serializer"]; 
 	message = serializer[expr]; 
@@ -113,7 +113,7 @@ CreateType[WebSocketChannel, init, {
 }]; 
 
 
-WebSocketChannel[name_String, clients: {___SocketObject | ___CSocket}: {}, serializer_: $serializer] := 
+WebSocketChannel[name_String, clients: {___SocketObject | ___CSocketObject}: {}, serializer_: $serializer] := 
 Module[{channel, connections}, 
 	channel = WebSocketChannel["Name" -> name, "Serializer" -> serializer]; 
 	connections = channel["Connections"]; 
@@ -124,7 +124,7 @@ Module[{channel, connections},
 ]; 
 
 
-WebSocketChannel /: Append[channel_WebSocketChannel, client: _SocketObject | _CSocket] := 
+WebSocketChannel /: Append[channel_WebSocketChannel, client: _SocketObject | _CSocketObject] := 
 Module[{connections}, 
 	connections = channel["Connections"]; 
 	connections["Insert", client]; 
@@ -137,7 +137,7 @@ Module[{connections},
 ]; 
 
 
-WebSocketChannel /: Delete[channel_WebSocketChannel, client: _SocketObject | _CSocket] := 
+WebSocketChannel /: Delete[channel_WebSocketChannel, client: _SocketObject | _CSocketObject] := 
 Module[{connections}, 
 	connections = channel["Connections"]; 
 	connections["Remove", client]; 
@@ -150,11 +150,11 @@ Module[{connections},
 ]; 
 
 
-WebSocketChannel /: WebSocketSend[channel_WebSocketChannel, client: _SocketObject | _CSocket, message: _String | _ByteArray] := 
+WebSocketChannel /: WebSocketSend[channel_WebSocketChannel, client: _SocketObject | _CSocketObject, message: _String | _ByteArray] := 
 If[FailureQ[#], Delete[channel, client]]& @ WebSocketSend[client, message]; 
 
 
-WebSocketChannel /: WebSocketSend[channel_WebSocketChannel, client: _SocketObject | _CSocket, expr_] := 
+WebSocketChannel /: WebSocketSend[channel_WebSocketChannel, client: _SocketObject | _CSocketObject, expr_] := 
 Module[{serializer, message}, 
 	serializer = channel["Serializer"]; 
 	message = serializer[expr]; 
@@ -179,7 +179,7 @@ CreateType[WebSocketHandler, init, {
 }]; 
 
 
-handler_WebSocketHandler[client: _SocketObject | _CSocket, message_ByteArray] := 
+handler_WebSocketHandler[client: _SocketObject | _CSocketObject, message_ByteArray] := 
 Module[{connections, deserializer, messageHandler, defaultMessageHandler, frame, buffer, data, expr}, 
 	$CurrenctClient = client; 
 
@@ -223,11 +223,11 @@ Module[{connections, deserializer, messageHandler, defaultMessageHandler, frame,
 ]; 
 
 
-WebSocketHandler /: WebSocketSend[handler_WebSocketHandler, client: _SocketObject | _CSocket, message_] := 
+WebSocketHandler /: WebSocketSend[handler_WebSocketHandler, client: _SocketObject | _CSocketObject, message_] := 
 WebSocketSend[client, encodeFrame[handler, message]]; 
 
 
-WebSocketHandler /: WebSocketChannel[handler_WebSocketHandler, name_String, clients: {___SocketObject | ___CSocket}: {}] := 
+WebSocketHandler /: WebSocketChannel[handler_WebSocketHandler, name_String, clients: {___SocketObject | ___CSocketObject}: {}] := 
 Module[{channel}, 
 	channel = WebSocketChannel[name, clients]; 
 	channel["Serializer"] := handler["Serializer"]; 
@@ -272,12 +272,12 @@ WebSocketChannel /: init[channel_WebSocketChannel] :=
 channel["Connections"] = CreateDataStructure["HashSet"]; 
 
 
-getConnetionsByClient[client: _SocketObject | _CSocket] := 
+getConnetionsByClient[client: _SocketObject | _CSocketObject] := 
 (*Return: DataStructure[HashSet]*)
 $connections[client]; 
 
 
-handshakeQ[client: _SocketObject | _CSocket, message_ByteArray] := 
+handshakeQ[client: _SocketObject | _CSocketObject, message_ByteArray] := 
 Module[{head, connections}, 
 	(*Result: DataStructure[HashSet]*)
 	connections = getConnetionsByClient[client]; 
@@ -291,7 +291,7 @@ Module[{head, connections},
 ]; 
 
 
-frameQ[client: _SocketObject | _CSocket, message_ByteArray] := 
+frameQ[client: _SocketObject | _CSocketObject, message_ByteArray] := 
 Module[{connections}, 
 	(*Result: DataStructure[HashSet]*)
 	connections = getConnetionsByClient[client];
@@ -301,7 +301,7 @@ Module[{connections},
 ]; 
 
 
-closeQ[client: _SocketObject | _CSocket, message_ByteArray] := 
+closeQ[client: _SocketObject | _CSocketObject, message_ByteArray] := 
 Module[{connections}, 
 	(*Result: DataStructure[HashSet]*)
 	connections = getConnetionsByClient[client]; 
@@ -312,7 +312,7 @@ Module[{connections},
 ]; 
 
 
-pingQ[client: _SocketObject | _CSocket, message_ByteArray] := 
+pingQ[client: _SocketObject | _CSocketObject, message_ByteArray] := 
 Module[{connections}, 
 	(*Result: DataStructure[HashSet]*)
 	connections = getConnetionsByClient[client]; 
@@ -322,7 +322,7 @@ Module[{connections},
 ]; 
 
 
-pong[client: _SocketObject | _CSocket, message_ByteArray] := 
+pong[client: _SocketObject | _CSocketObject, message_ByteArray] := 
 Module[{firstByte}, 
 	firstByte = IntegerDigits[message[[1]], 2, 8]; 
 	firstByte[[5 ;; 8]] = {1, 0, 1, 0}; 
@@ -332,7 +332,7 @@ Module[{firstByte},
 ]; 
 
 
-handshake[client: _SocketObject | _CSocket, message_ByteArray] := 
+handshake[client: _SocketObject | _CSocketObject, message_ByteArray] := 
 Module[{messageString, key, acceptKey}, 
 	messageString = ByteArrayToString[message]; 
 	key = StringExtract[messageString, "Sec-WebSocket-Key: " -> 2, "\r\n" -> 1]; 
@@ -401,7 +401,7 @@ Module[{header, payload, data},
 ]; 
 
 
-getFrameLength[client: _SocketObject | _CSocket, message_ByteArray] := 
+getFrameLength[client: _SocketObject | _CSocketObject, message_ByteArray] := 
 Module[{length}, 
 	length = FromDigits[IntegerDigits[message[[2]], 2, 8][[2 ;; ]], 2]; 
 
@@ -465,7 +465,7 @@ If[VersionQ[13.2],
 	FileNameJoin[{$directory, "Kernel", "unmask-uncompiled.wl"}] // Get
 ];
 
-saveFrameToBuffer[buffer_DataStructure, client: (SocketObject | CSocket)[uuid_], frame_] := 
+saveFrameToBuffer[buffer_DataStructure, client: (SocketObject | CSocketObject)[uuid_], frame_] := 
 Module[{clientBuffer}, 
 	If[buffer["KeyExistsQ", uuid], 
 		clientBuffer = buffer["Lookup", uuid]; 
@@ -478,7 +478,7 @@ Module[{clientBuffer},
 ]; 
 
 
-getDataAndDropBuffer[buffer_DataStructure, client: (SocketObject | CSocket)[uuid_], frame_] := 
+getDataAndDropBuffer[buffer_DataStructure, client: (SocketObject | CSocketObject)[uuid_], frame_] := 
 Module[{fragments, clientBuffer}, 
 	If[buffer["KeyExistsQ", uuid], 
 		clientBuffer = buffer["Lookup", uuid]; 
