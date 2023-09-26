@@ -458,10 +458,21 @@ Module[{byte1, byte2, fin, opcode, mask, len, maskingKey, nextPosition, payload,
 
 VersionQ[n_] := $VersionNumber >= n
 
+testUnmask[func_] := If[func[{1,2,3,4}, {1,2,3,4,5,6,7,8,9}] === {0,0,0,0,4,4,4,12,8}, True, False]
+
 unmask := unmask = 
 If[VersionQ[13.2],
-	PreCompile[{$directory, "unmask"}, FileNameJoin[{$directory, "Kernel", "unmask.wl"}]]
+	With[{compiled = PreCompile[{$directory, "unmask"}, FileNameJoin[{$directory, "Kernel", "unmask.wl"}]]},
+		If[testUnmask[compiled],
+			compiled
+		,
+			Print[">> test FAILED: using uncompiled unmask"];
+			FileNameJoin[{$directory, "Kernel", "unmask-uncompiled.wl"}] // Get
+
+		]
+	]
 ,
+	Print[">> legacy WL: using uncompiled unmask"];
 	FileNameJoin[{$directory, "Kernel", "unmask-uncompiled.wl"}] // Get
 ];
 
