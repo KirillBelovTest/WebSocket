@@ -1,7 +1,7 @@
 (* ::Package:: *)
 
 (* ::Chapter:: *)
-(*WS Handler*)
+(*WebSocket Handler*)
 
 
 (* ::Program:: *)
@@ -30,11 +30,26 @@
 (*+---------------------------------------------------+*)
 
 
+(* ::Section::Closed:: *)
+(*Requarements*)
+
+
+Once[Map[If[Length[PacletFind[#]] === 0, PacletInstall[#]]&][{
+	"KirillBelov/Internal", 
+	"KirillBelov/Objects",  
+	"KirillBelov/TCP"
+}]]; 
+
+
 (*::Section::Close::*)
 (*Begin package*)
 
 
-BeginPackage["KirillBelov`WebSocketHandler`", {"KirillBelov`Internal`", "KirillBelov`Objects`"}]; 
+BeginPackage["KirillBelov`WebSocket`", {
+	"KirillBelov`Internal`", 
+	"KirillBelov`Objects`", 
+	"KirillBelov`TCP`",
+}]; 
 
 
 (*::Section::Close::*)
@@ -44,28 +59,28 @@ BeginPackage["KirillBelov`WebSocketHandler`", {"KirillBelov`Internal`", "KirillB
 ClearAll["`*"]; 
 
 
-$CurrenctClient::usage = 
-"Current client."; 
-
-
 WebSocketPacketQ::usage = 
-"WebSocketPacketQ[client, packet] check that packet sent via WebSocket protocol."; 
+"WebSocketPacketQ[packet] check that packet sent via WebSocket protocol."; 
 
 
 WebSocketPacketLength::usage = 
-"WSLength[client, message] get expected message length."; 
-
-
-WebSocketSend::uasge = 
-"WebSocketSend[client, message] send message via WebSocket protocol."; 
-
-
-WebSocketChannel::usage = 
-"WebSocketChannel[name] multiple client connection."; 
+"WSLength[packet] get expected message length."; 
 
 
 WebSocketHandler::usage = 
 "WebSocketHandler[opts] handle messages received via WebSocket protocol."; 
+
+
+WebSocketSend::uasge = 
+"WebSocketSend[connection, message] send message via WebSocket protocol."; 
+
+
+WebSocketConnect::usage = 
+"WebSocketConnect[host, port] connect to the remote server."; 
+
+
+WebSocketConnection::usage = 
+"WebSocketConnection[opts] representation of the client connection."; 
 
 
 (*::Section::Close::*)
@@ -78,20 +93,20 @@ Begin["`Private`"];
 ClearAll["`*"]; 
 
 
-WebSocketPacketQ[client_, message_ByteArray] := 
-(frameQ[client, message] || handshakeQ[client, message]); 
+WebSocketPacketQ[packet_Association] := 
+frameQ[packet] || handshakeQ[packet]; 
 
 
-WebSocketPacketLength[client_, message_ByteArray] := 
-If[frameQ[client, message], 
-	getFrameLength[client, message], 
-	Length[message]
+WebSocketPacketLength[packet_Association] := 
+If[frameQ[packet], 
+	getFrameLength[packet["DataButeArray"]], 
+	Length[packet["DataByteArray"]]
 ]; 
 
 
 Options[WebSocketSend] = {
 	"Serializer" -> $serializer
-}
+}; 
 
 
 WebSocketSend[client_, message: _String | _ByteArray] := 
@@ -106,69 +121,6 @@ Module[{serializer, message},
 ]; 
 
 
-CreateType[WebSocketChannel, init, {
-	"Name", 
-	"Serializer" -> $serializer, 
-	"Connections"
-}]; 
-
-
-WebSocketChannel[name_String, clients: {___}: {}, serializer_: $serializer] := 
-Module[{channel, connections}, 
-	channel = WebSocketChannel["Name" -> name, "Serializer" -> serializer]; 
-	connections = channel["Connections"]; 
-	Map[connections["Insert", #]&, clients]; 
-	
-	(*Return: WebSocketChannel[]*)
-	channel
-]; 
-
-
-WebSocketChannel /: Append[channel_WebSocketChannel, client_] := 
-Module[{connections}, 
-	connections = channel["Connections"]; 
-	connections["Insert", client]; 
-
-	Echo[client, "Added client:"];
-	Echo[connections//Normal, "Current subscriptions:"];
-
-	(*Return: WebSocketChannel[]*)
-	channel
-]; 
-
-
-WebSocketChannel /: Delete[channel_WebSocketChannel, client_] := 
-Module[{connections}, 
-	connections = channel["Connections"]; 
-	connections["Remove", client]; 
-
-	Echo[client, "Deleted client:"];
-	Echo[connections//Normal, "Current subscriptions:"];
-
-	(*Return: WebSocketChannel[]*)
-	channel
-]; 
-
-
-WebSocketChannel /: WebSocketSend[channel_WebSocketChannel, client_, message: _String | _ByteArray] := 
-If[FailureQ[#], Delete[channel, client]]& @ WebSocketSend[client, message]; 
-
-
-WebSocketChannel /: WebSocketSend[channel_WebSocketChannel, client_, expr_] := 
-Module[{serializer, message}, 
-	serializer = channel["Serializer"]; 
-	message = serializer[expr]; 
-	WebSocketSend[channel, client, message]; 
-]; 
-
-
-WebSocketChannel /: WebSocketSend[channel_WebSocketChannel, expr_] := 
-Module[{connections}, 
-	connections = channel["Connections"]; 
-	Map[WebSocketSend[channel, #, expr]&, connections["Elements"]]; 
-]; 
-
-
 CreateType[WebSocketHandler, init, {
 	"MessageHandler" -> <||>, 
 	"DefaultMessageHandler" -> $defaultMessageHandler, 	
@@ -179,10 +131,24 @@ CreateType[WebSocketHandler, init, {
 }]; 
 
 
-handler_WebSocketHandler[client_, message_ByteArray] := 
-Module[{connections, deserializer, messageHandler, defaultMessageHandler, frame, buffer, data, expr}, 
-	$CurrenctClient = client; 
+AddTo[server_TCPServer, handler_WebSocketHandler] ^:= (
+	server["CompleteHandler", "WebSocket"] = WebSocketPacketQ -> WebSocketPacketLength; 
+	server["MessageHandler", "WebSocket"] = WebSocketPacketQ -> handler; 
+); 
 
+
+AddTo[server_TCPServer, key_String -> handler_WebSocketHandler] ^:= (
+	server["CompleteHandler", key] = WebSocketPacketQ -> WebSocketPacketLength; 
+	server["MessageHandler", key] = WebSocketPacketQ -> handler; 
+); 
+
+
+handler_WebSocketHandler[packet_Association] := 
+Module[{
+	client = packet["SourceSocket"], 
+	message = packet["Message"], 
+	connections, deserializer, messageHandler, defaultMessageHandler, frame, buffer, data, expr
+}, 
 	connections = handler["Connections"]; 
 	deserializer = handler["Deserializer"]; 
 	Which[
@@ -199,6 +165,7 @@ Module[{connections, deserializer, messageHandler, defaultMessageHandler, frame,
 		(*Return: Null*)
 		frameQ[client, message], 
 			frame = decodeFrame[message]; 
+			ByteArrayToString[frame["Data"]]; 
 			buffer = handler["Buffer"]; 
 
 			If[
@@ -250,10 +217,10 @@ $httpEndOfHead = StringToByteArray["\r\n\r\n"];
 $defaultMessageHandler = Close@#&; 
 
 
-$deserializer = #&; 
+$deserializer = ImportByteArray[#, "RawJSON"]&; 
 
 
-$serializer = ExportByteArray[#, "Text"]&; 
+$serializer = ExportByteArray[#, "RawJSON"]&; 
 
 
 $directory = DirectoryName[$InputFileName, 2]; 
@@ -294,7 +261,7 @@ Module[{head, connections},
 frameQ[client_, message_ByteArray] := 
 Module[{connections}, 
 	(*Result: DataStructure[HashSet]*)
-	connections = getConnetionsByClient[client];
+	connections = getConnetionsByClient[client]; 
 
 	(*Return: True | False*)
 	DataStructureQ[connections] && connections["MemberQ", client]
@@ -353,7 +320,7 @@ BaseEncode[Hash[key <> $guid, "SHA1", "ByteArray"], "Base64"];
 
 
 encodeFrame[message_ByteArray] := 
-Module[{byte1, fin, opcode, length, mask, lengthBytes, reserved}, 
+Module[{byte1, fin, opcode, length, mask, lengthBytes, reserved, maskingKey}, 
 	fin = {1}; 
 	
 	reserved = {0, 0, 0}; 
@@ -366,15 +333,17 @@ Module[{byte1, fin, opcode, length, mask, lengthBytes, reserved},
 
 	Which[
 		length < 126, 
-			lengthBytes = ByteArray[{length}], 
+			lengthBytes = ByteArray[{128 + length}], 
 		126 <= length < 2^16, 
-			lengthBytes = ByteArray[Join[{126}, IntegerDigits[length, 256, 2]]], 
+			lengthBytes = ByteArray[Join[{128 + 126}, IntegerDigits[length, 256, 2]]], 
 		2^16 <= length < 2^64, 
-			lengthBytes = ByteArray[Join[{127}, IntegerDigits[length, 256, 8]]]
+			lengthBytes = ByteArray[Join[{128 + 127}, IntegerDigits[length, 256, 8]]]
 	]; 
 
+	maskingKey = RandomInteger[{0, 255}, 4]; 
+
 	(*Return: _ByteArray*)
-	ByteArray[Join[byte1, lengthBytes, message]]
+	ByteArray[Join[byte1, lengthBytes, maskingKey, unmask[maskingKey, message]]]
 ]; 
 
 
@@ -456,25 +425,24 @@ Module[{byte1, byte2, fin, opcode, mask, len, maskingKey, nextPosition, payload,
 	|>
 ]; 
 
-VersionQ[n_] := $VersionNumber >= n
 
-testUnmask[func_] := If[func[{1,2,3,4}, {1,2,3,4,5,6,7,8,9}] === {0,0,0,0,4,4,4,12,8}, True, False]
+unmaskCompiled = Compile[{{from, _Integer}, {maskingByte, _Integer}, {payload, _Integer, 1}},
+Table[
+	BitXor[payload[[i]], maskingByte], {i, from, Length[payload], 4}], 
+	Parallelization -> True, 
+	RuntimeAttributes -> {Listable}, 
+	CompilationOptions -> {"ExpressionOptimization" -> True}, 
+   "RuntimeOptions" -> "Speed"
+]; 
 
-unmask := unmask = 
-If[VersionQ[13.2],
-	With[{compiled = PreCompile[{$directory, "unmask"}, FileNameJoin[{$directory, "Kernel", "unmask.wl"}]]},
-		If[testUnmask[compiled],
-			compiled
-		,
-			Print[">> test FAILED: using uncompiled unmask"];
-			FileNameJoin[{$directory, "Kernel", "unmask-uncompiled.wl"}] // Get
 
-		]
-	]
-,
-	Print[">> legacy WL: using uncompiled unmask"];
-	FileNameJoin[{$directory, "Kernel", "unmask-uncompiled.wl"}] // Get
-];
+unmask[maskingKey_List, payload_List] := 
+Flatten[Transpose[unmaskCompiled[{1, 2, 3, 4}, maskingKey, payload]]]; 
+
+
+unmask[maskingKey_List, payload_ByteArray] := 
+ByteArray[unmask[maskingKey, Normal[payload]]]; 
+
 
 saveFrameToBuffer[buffer_DataStructure, client: _[uuid_], frame_] := 
 Module[{clientBuffer}, 

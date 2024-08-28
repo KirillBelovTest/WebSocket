@@ -7,7 +7,7 @@ PacletObject[
     "Creator" -> "Kirill Belov",
     "License" -> "MIT",
     "PublisherID" -> "KirillBelov",
-    "Version" -> "1.0.15",
+    "Version" -> "1.0.16",
     "WolframVersion" -> "13+",
     "Extensions" -> {
       {
@@ -15,16 +15,16 @@ PacletObject[
         "Root" -> "Kernel",
         "Context" -> {
           {
-            "KirillBelov`WebSocketHandler`",
-            "WebSocketHandler.wl"
+            "KirillBelov`WebSocket`",
+            "WebSocket.wl"
           }, 
           {
             "KirillBelov`WebSocketHandler`Extensions`",
             "Extensions.wl"
           }, 
           {
-            "KirillBelov`WebSocketHandler`RemoteParallelKernel`", 
-            "RemoteParallelKernel.wl"
+            "KirillBelov`WebSocketHandler`WebKernel`", 
+            "WebKernel.wl"
           }
         },
         "Symbols" -> {}
