@@ -36,8 +36,7 @@
 
 Once[Map[If[Length[PacletFind[#]] === 0, PacletInstall[#]]&][{
 	"KirillBelov/Internal", 
-	"KirillBelov/Objects",  
-	"KirillBelov/TCP"
+	"KirillBelov/Objects"
 }]]; 
 
 
@@ -46,9 +45,9 @@ Once[Map[If[Length[PacletFind[#]] === 0, PacletInstall[#]]&][{
 
 
 BeginPackage["KirillBelov`WebSocket`", {
-	"KirillBelov`Internal`", 
-	"KirillBelov`Objects`", 
-	"KirillBelov`TCP`",
+	"KirillBelov`Internal`Binary`", 
+	"KirillBelov`Internal`Functions`", 
+	"KirillBelov`Objects`"
 }]; 
 
 
@@ -129,18 +128,6 @@ CreateType[WebSocketHandler, init, {
 	"Connections", 
 	"Buffer"
 }]; 
-
-
-AddTo[server_TCPServer, handler_WebSocketHandler] ^:= (
-	server["CompleteHandler", "WebSocket"] = WebSocketPacketQ -> WebSocketPacketLength; 
-	server["MessageHandler", "WebSocket"] = WebSocketPacketQ -> handler; 
-); 
-
-
-AddTo[server_TCPServer, key_String -> handler_WebSocketHandler] ^:= (
-	server["CompleteHandler", key] = WebSocketPacketQ -> WebSocketPacketLength; 
-	server["MessageHandler", key] = WebSocketPacketQ -> handler; 
-); 
 
 
 handler_WebSocketHandler[packet_Association] := 

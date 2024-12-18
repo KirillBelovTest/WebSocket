@@ -2,30 +2,19 @@
 
 PacletObject[
   <|
-    "Name" -> "KirillBelov/WebSocketHandler",
-    "Description" -> "WebSocket Handler",
+    "Name" -> "KirillBelov/WebSocket",
+    "Description" -> "WebSocket",
     "Creator" -> "Kirill Belov",
     "License" -> "MIT",
     "PublisherID" -> "KirillBelov",
-    "Version" -> "1.0.16",
+    "Version" -> "1.0.0",
     "WolframVersion" -> "13+",
     "Extensions" -> {
       {
         "Kernel",
         "Root" -> "Kernel",
         "Context" -> {
-          {
-            "KirillBelov`WebSocket`",
-            "WebSocket.wl"
-          }, 
-          {
-            "KirillBelov`WebSocketHandler`Extensions`",
-            "Extensions.wl"
-          }, 
-          {
-            "KirillBelov`WebSocketHandler`WebKernel`", 
-            "WebKernel.wl"
-          }
+          {"KirillBelov`WebSocket`", "WebSocket.wl"}
         },
         "Symbols" -> {}
       },
