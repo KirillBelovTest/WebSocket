@@ -36,7 +36,8 @@
 
 Once[Map[If[Length[PacletFind[#]] === 0, PacletInstall[#]]&][{
     "KirillBelov/Internal", 
-    "KirillBelov/Objects"
+    "KirillBelov/Objects", 
+    "KirillBelov/CSockets"
 }]]; 
 
 
@@ -47,7 +48,8 @@ Once[Map[If[Length[PacletFind[#]] === 0, PacletInstall[#]]&][{
 BeginPackage["KirillBelov`WebSocket`", {
     "KirillBelov`Internal`Binary`", 
     "KirillBelov`Internal`Functions`", 
-    "KirillBelov`Objects`"
+    "KirillBelov`Objects`", 
+    "KirillBelov`CSockets`TCP`"
 }]; 
 
 
@@ -92,13 +94,50 @@ Begin["`Private`"];
 ClearAll["`*"]; 
 
 
+Options[WebSocketConnect] = {
+    "Serializer" -> ToString, 
+    "Deserializer" -> ToExpression
+};
+
+
+WebSocketConnect[address_?StringQ, opts: OptionsPattern[]] := 
+With[{
+    parseAddress = URLParse[address], 
+    serializer = OptionValue["Serializer"], 
+    deserializer = OptionValue["Deserializer"]
+}, 
+    With[{socket = CSocketConnect[parseAddress["Domain"], If[# === None, 80, #]& @ parseAddress["Port"]]}, 
+        BinaryWrite[socket, StringToByteArray[clientHandshake[URLBuild[parseAddress["Path"], parseAddress["Query"]]]]]; 
+
+        WebSocketConnection[
+            "Socket" -> socket, 
+            "Serializer" -> serializer, 
+            "Deserializer" -> deserializer
+        ]
+    ]
+]; 
+
+
+clientHandshake = StringTemplate["GET /`` HTTP/1.1\r\n
+Host: example.com\r\n\
+Upgrade: websocket\r\n\
+Connection: Upgrade\r\n\
+Sec-WebSocket-Key: <* uuid *>\r\n\
+Sec-WebSocket-Version: 13\r\n\
+\r\n"]; 
+
+
+uuid := BaseEncode[BinarySerialize[CreateUUID[]], "Base64"]; 
+
+
 WebSocketPacketQ[packet_Association] := 
-frameQ[packet] || handshakeQ[packet]; 
+frameQ[packet["SourceSocket"], packet["DataByteArray"]] || 
+handshakeQ[packet["SourceSocket"], packet["DataByteArray"]]; 
 
 
 WebSocketPacketLength[packet_Association] := 
-If[frameQ[packet], 
-    getFrameLength[packet["DataButeArray"]], 
+If[frameQ[packet["SourceSocket"], packet["DataByteArray"]], 
+    getFrameLength[packet["DataByteArray"]], 
     Length[packet["DataByteArray"]]
 ]; 
 
@@ -413,9 +452,9 @@ Module[{byte1, byte2, fin, opcode, mask, len, maskingKey, nextPosition, payload,
 ]; 
 
 
-unmaskCompiled = Compile[{{from, _Integer}, {maskingByte, _Integer}, {payload, _Integer, 1}},
+unmaskCompiled = Compile[{{maskingKey, _Integer, 1}, {payload, _Integer, 1}},
 Table[
-    BitXor[payload[[i]], maskingByte], {i, from, Length[payload], 4}], 
+    BitXor[payload[[i]], maskingKey[[Mod[i - 1, 4] + 1]]], {i, 1, Length[payload]}], 
     Parallelization -> True, 
     RuntimeAttributes -> {Listable}, 
     CompilationOptions -> {"ExpressionOptimization" -> True}, 
@@ -423,12 +462,8 @@ Table[
 ]; 
 
 
-unmask[maskingKey_List, payload_List] := 
-Flatten[Transpose[unmaskCompiled[{1, 2, 3, 4}, maskingKey, payload]]]; 
-
-
-unmask[maskingKey_List, payload_ByteArray] := 
-ByteArray[unmask[maskingKey, Normal[payload]]]; 
+unmask[maskingKey_, payload_] := 
+ByteArray[unmaskCompiled[Normal[maskingKey], Normal[payload]]]; 
 
 
 saveFrameToBuffer[buffer_DataStructure, client: _[uuid_], frame_] := 
