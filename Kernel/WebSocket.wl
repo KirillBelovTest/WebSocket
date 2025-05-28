@@ -292,6 +292,28 @@ WebSocketHandler /: WebSocketSend[handler_WebSocketHandler, client_, message_] :
 WebSocketSend[client, encodeFrame[handler, message]]; 
 
 
+CreateWebSocketServer[port_Integer, messageHandlers_?AssociationQ, name_String: "WebSocket"] := 
+With[{
+    serverSocket = CSocketOpen[port], 
+    serverHandler = CSocketHandler[]
+}, 
+    With[{
+        listener = SocketListen[serverSocket, serverHandler], 
+        webSocketHandler = WebSocketHandler[]
+    }, 
+        webSocketHandler["Listener"] = listener;
+
+        serverHandler["Accumulator", name] = WebSocketPacketQ -> WebSocketPacketLength;
+        serverHandler["Handler", name] = WebSocketPacketQ -> webSocketHandler;
+
+        webSocketHandler["MessageHandler"] = messageHandlers; 
+
+        (*Return*)
+        webSocketHandler
+    ]
+];
+
+
 (*::Section::Close::*)
 (*Internal*)
 

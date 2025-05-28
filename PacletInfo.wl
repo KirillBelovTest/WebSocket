@@ -18,8 +18,7 @@ PacletObject[
         },
         "Symbols" -> {}
       },
-      {"Documentation", "Language" -> "English"},
-      {"LibraryLink", "Root" -> "LibraryResources"},
+      {"Documentation", "Language" -> "English"}, 
       {
         "Asset",
         "Assets" -> {
