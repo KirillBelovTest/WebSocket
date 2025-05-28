@@ -136,6 +136,39 @@ With[{parsedAddress = URLParse[address]},
 ]; 
 
 
+WebSocketConnection /: BinaryWrite[connection_WebSocketConnection, message_] := 
+WebSocketSend[connection["Socket"], message, "Masking" -> True, "Serializer" -> connection["Serializer"]];
+
+
+WebSocketConnection /: WriteString[connection_WebSocketConnection, message_] := 
+WebSocketSend[connection["Socket"], message, "Masking" -> True, "Serializer" -> connection["Serializer"]];
+
+
+WebSocketConnection /: WebSocketSend[connection_WebSocketConnection, message_] := 
+WebSocketSend[connection["Socket"], message, "Masking" -> True, "Serializer" -> connection["Serializer"]];
+
+
+WebSocketConnection /: SocketReadyQ[connection_WebSocketConnection, timeout: _?NumericQ: 0] := 
+SocketReadyQ[connection["Socket"], timeout];
+
+
+WebSocketConnection /: SocketReadMessage[connection_WebSocketConnection] := 
+Module[{message = ByteArray[{}]}, 
+    If[!SocketReadyQ[connection], 
+        (*Return: $Failed*)
+        $Failed, 
+    (*Else*) 
+        (*Return: _ByteArray*)
+        While[SocketReadyQ[connection, 0.01], 
+            message = Join[message, SocketReadMessage[connection["Socket"]]];
+        ]; 
+        
+        (* Return: ByteArray[] *)
+        connection["Deserializer"][message]
+    ]
+];
+
+
 clientHandshake = StringTemplate["GET `` HTTP/1.1\r\n\
 Host: example.com\r\n\
 Upgrade: websocket\r\n\
