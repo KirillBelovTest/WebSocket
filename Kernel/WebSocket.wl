@@ -324,12 +324,12 @@ KeyExistsQ[packet, "DataByteArray"] && ByteArrayQ[packet["DataByteArray"]];
 
 handshakeQ[client_, message_ByteArray] := 
 Module[{head, connections}, 
-    Echo[head = ByteArrayToString[BytesSplit[message, $httpEndOfHead -> 1][[1]]], "HEAD:"]; 
+    head = ByteArrayToString[BytesSplit[message, $httpEndOfHead -> 1][[1]]]; 
 
     (*Return: True | False*)
-    Echo[Length[message] != StringLength[head] && 
+    Length[message] != StringLength[head] && 
     StringContainsQ[head, StartOfString ~~ "GET /", IgnoreCase -> True] && 
-    StringContainsQ[head, StartOfLine ~~ "Upgrade: websocket", IgnoreCase -> True], "HANDSHAKEQ:"]
+    StringContainsQ[head, StartOfLine ~~ "Upgrade: websocket", IgnoreCase -> True]
 ]; 
 
 
