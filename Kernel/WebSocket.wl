@@ -99,6 +99,9 @@ Begin["`Private`"];
 ClearAll["`*"]; 
 
 
+(* WebSocketConnect *)
+
+
 Options[WebSocketConnect] = {
     "Serializer" -> Function[ExportByteArray[#, "RawJSON"]], 
     "Deserializer" -> Function[ImportByteArray[#, "RawJSON"]]
