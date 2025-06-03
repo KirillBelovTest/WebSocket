@@ -204,8 +204,6 @@ Module[{
             buffer = handler["Buffer"]; 
             frame = decodeFrame[message]; (*<|"Fin"->..,"Opcode"->..,"Payload"->..|>*)
 
-            Echo[frame, "FRAME:"];
-
             If[
                 frame["Fin"], 
                     deserializer = Switch[frame["Opcode"], 
@@ -255,7 +253,7 @@ With[{
         webSocketHandler["Listener"] = listener;
 
         serverHandler["Accumulator", name] = WebSocketPacketQ -> WebSocketPacketLength;
-        serverHandler["Handler", name] = WebSocketPacketQ -> Function[Echo[#]; webSocketHandler[#]];
+        serverHandler["Handler", name] = WebSocketPacketQ -> Function[webSocketHandler[#]];
 
         webSocketHandler["MessageHandler"] = messageHandler; 
 
