@@ -228,7 +228,6 @@ Module[{
 
         (*Return: _String*)
         handshakeQ[message], 
-            Echo[ByteArrayToString[message], "Handshake received: "];
             $connectedClients[client] = handler; 
             connections["Insert", client]; 
             handshake[message]
@@ -306,10 +305,13 @@ With[{parsedAddress = URLParse[address]},
                 TimeConstrained[
                     While[SocketReadyQ[socket], 
                         responseMessage = Join[responseMessage, SocketReadMessage[socket]]
-                    ]; 
-                    Echo[ByteArrayToString[responseMessage]];, 
+                    ];, 
                     5, 
-                    $Failed
+                    Return[$Failed]
+                ];
+
+                If[!StringContainsQ[ByteArrayToString[responseMessage], "Upgrade: websocket", IgnoreCase -> True], 
+                    Return[$Failed]
                 ];
             ];
 
@@ -332,18 +334,30 @@ SocketReadyQ[connection["Socket"], timeout];
 
 
 WebSocketConnection /: SocketReadMessage[connection_WebSocketConnection] := 
-Module[{message = ByteArray[{}]}, 
+Module[{
+    message = ByteArray[{}], firstPart, 
+    socket = connection["Socket"], 
+    decoded, 
+    deserializer = connection["Deserializer"]
+}, 
     If[!SocketReadyQ[connection], 
         (*Return: $Failed*)
         $Failed, 
     (*Else*) 
-        (*Return: _ByteArray*)
-        While[SocketReadyQ[connection, 0.01], 
-            message = Join[message, SocketReadMessage[connection["Socket"]]];
-        ]; 
         
-        (* Return: ByteArray[] *)
-        connection["Deserializer"][message]
+        firstPart = SocketReadMessage[connection["Socket"]]; 
+        expectedLength = WebSocketPacketLength[<|"SourceSocket" -> socket, "DataByteArray" -> firstPart|>];
+
+        If[Length[firstPart] === expectedLength, 
+            decoded = decodeFrame[firstPart]; 
+            Which[
+                decoded["Opcode"] === "Text", deserializer @ ByteArrayToString @ decoded["Payload"], 
+                decoded["Opcode"] === "Binary", deserializer @ decoded["Payload"], 
+                True, firstPart
+            ], 
+        (*Else*)
+            $Failed
+        ]
     ]
 ];
 
