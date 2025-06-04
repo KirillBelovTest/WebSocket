@@ -159,9 +159,10 @@ Module[{serializer, message},
     
     message = serializer[expr]; 
 
-    If[Not[StringQ[message]] || Not[ByteArrayQ[message]], 
-        Message[WebSocketSend::cantsend], 
-        WebSocketSend[client, message]
+    If[StringQ[message] || ByteArrayQ[message],  
+        WebSocketSend[client, message], 
+    (*Else*)
+        Message[WebSocketSend::cantsend];
     ]
 ]; 
 
@@ -227,6 +228,7 @@ Module[{
 
         (*Return: _String*)
         handshakeQ[message], 
+            Echo[ByteArrayToString[message], "Handshake received: "];
             $connectedClients[client] = handler; 
             connections["Insert", client]; 
             handshake[message]
@@ -267,13 +269,6 @@ With[{
 (*WebSocketConnect*)
 
 
-Options[WebSocketConnect] = {
-    "Serializer" -> $defaultSerializer, 
-    "Deserializer" -> $defaultDeserializer, 
-    "Headers" -> <||>
-};
-
-
 CreateType[WebSocketConnection, {
     "Address", 
     "Headers" -> <||>,
@@ -309,7 +304,10 @@ With[{parsedAddress = URLParse[address]},
 
             Module[{responseMessage = ByteArray[{}]}, 
                 TimeConstrained[
-                    While[SocketReadyQ[socket], responseMessage = Join[responseMessage, SocketReadMessage[socket]]], 
+                    While[SocketReadyQ[socket], 
+                        responseMessage = Join[responseMessage, SocketReadMessage[socket]]
+                    ]; 
+                    Echo[ByteArrayToString[responseMessage]];, 
                     5, 
                     $Failed
                 ];
@@ -471,7 +469,7 @@ Module[{firstByte},
 
 
 encodeFrame[message_ByteArray, opcode: 0 | 1 | 2: 2, masking: True | False: True] := 
-Module[{byte1, fin, length, mask, lengthBytes, reserved, maskBit, maskingKey}, 
+Module[{byte1, fin, length, mask, lengthBytes, reserved, maskBit, maskingKey, opcodeBytes}, 
     fin = {UnitStep[opcode - 1]}; 
     
     maskBit = If[masking, 1, 0];
@@ -480,7 +478,7 @@ Module[{byte1, fin, length, mask, lengthBytes, reserved, maskBit, maskingKey},
 
     opcodeBytes = IntegerDigits[opcode, 2, 4]; 
 
-    byte1 = ByteArray[{FromDigits[Join[fin, reserved, opcode], 2]}]; 
+    byte1 = ByteArray[{FromDigits[Join[fin, reserved, opcodeBytes], 2]}]; 
 
     length = Length[message]; 
 
