@@ -145,7 +145,7 @@ WebSocketSend::cantsend =
 "Expr not serialized.";
 
 
-WebSocketSend[client_, message: _String | _ByteArray] := 
+WebSocketSend[client_, message: _String | _ByteArray, OptionsPattern[]] := 
 BinaryWrite[client, encodeFrame[message, !clientConnectedQ[client]]];
 
 
@@ -153,7 +153,7 @@ WebSocketSend[client_, expr_, opts: OptionsPattern[]] :=
 Module[{serializer, message}, 
     serializer = Which[
         # =!= Automatic, #, 
-        !clientConnectedQ[client], $defaultSerializers, 
+        !clientConnectedQ[client], $defaultSerializer, 
         True, $connectedClients[client]["Serializer"]
     ]& @ OptionValue["Serializer"]; 
     
@@ -268,22 +268,25 @@ With[{
 
 
 Options[WebSocketConnect] = {
-    "Serializer" -> ToString, 
-    "Deserializer" -> Identity
+    "Serializer" -> $defaultSerializer, 
+    "Deserializer" -> $defaultDeserializer, 
+    "Headers" -> <||>
 };
 
 
 CreateType[WebSocketConnection, {
     "Address", 
+    "Headers" -> <||>,
     "Socket", 
-    "Serializer" -> ToString, 
-    "Deserializer" -> Identity
+    "Serializer" -> $defaultSerializer,
+    "Deserializer" -> $defaultDeserializer
 }]; 
 
 
 Options[WebSocketConnect] = {
-    "Serializer" -> ToString, 
-    "Deserializer" -> Identity
+    "Headers" -> <||>, 
+    "Serializer" -> $defaultSerializer,
+    "Deserializer" -> $defaultDeserializer
 };
 
 
@@ -292,10 +295,25 @@ With[{parsedAddress = URLParse[address]},
     With[{
         host = parsedAddress["Domain"], 
         port = If[# === None, 80, #]& @ parsedAddress["Port"], 
-        path = "/" <> StringTrim[URLBuild[parsedAddress["Path"], parsedAddress["Query"]], "/"]    
+        path = "/" <> StringTrim[URLBuild[parsedAddress["Path"], parsedAddress["Query"]], "/"], 
+        headers = If[# === "", #, # <> "\r\n"]& @ StringRiffle[KeyValueMap[#1 <> ": " <> #2&, OptionValue["Headers"]], "\r\n"]
     }, 
         With[{socket = CSocketConnect[host, port]}, 
-            WriteString[socket, clientHandshakeTemplate[path]]; 
+            WriteString[socket, clientHandshakeTemplate[path, headers]]; 
+
+            TimeConstrained[
+                While[!SocketReadyQ[socket], Pause[0.01]], 
+                5, 
+                Return[$Failed]
+            ];
+
+            Module[{responseMessage = ByteArray[{}]}, 
+                TimeConstrained[
+                    While[SocketReadyQ[socket], responseMessage = Join[responseMessage, SocketReadMessage[socket]]], 
+                    5, 
+                    $Failed
+                ];
+            ];
 
             WebSocketConnection[
                 "Address" -> address, 
@@ -306,8 +324,9 @@ With[{parsedAddress = URLParse[address]},
     ]
 ]; 
 
+
 WebSocketConnection /: WebSocketSend[connection_WebSocketConnection, message_] := 
-WebSocketSend[connection["Socket"], message, "Masking" -> True, "Serializer" -> connection["Serializer"]];
+WebSocketSend[connection["Socket"], message, "Serializer" -> connection["Serializer"]];
 
 
 WebSocketConnection /: SocketReadyQ[connection_WebSocketConnection, timeout: _?NumericQ: 0] := 
@@ -335,12 +354,13 @@ Module[{message = ByteArray[{}]},
 (*Internal*)
 
 
-clientHandshakeTemplate = StringTemplate["GET `` HTTP/1.1\r\n\
+clientHandshakeTemplate = StringTemplate["GET `1` HTTP/1.1\r\n\
 Host: example.com\r\n\
 Upgrade: websocket\r\n\
 Connection: Upgrade\r\n\
 Sec-WebSocket-Key: <* $clientHandshakeUUID *>\r\n\
 Sec-WebSocket-Version: 13\r\n\
+`2`\
 \r\n"]; 
 
 
@@ -354,6 +374,12 @@ $httpEndOfHead = StringToByteArray["\r\n\r\n"];
 
 
 $directory = DirectoryName[$InputFileName, 2]; 
+
+
+$defaultSerializer = ToString;
+
+
+$defaultDeserializer = Identity;
 
 
 If[!AssociationQ[$connectedClients], $connectedClients = <||>]; 
@@ -531,7 +557,7 @@ Module[{
     opcode = Switch[FromDigits[byte1[[2 ;; ]], 2], 
         0, "Part", 
         1, "Text", 
-        2, "Binary",  
+        2, "Binary", 
         _, "Unexpected"
     ]; 
 
