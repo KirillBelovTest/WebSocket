@@ -335,7 +335,8 @@ SocketReadyQ[connection["Socket"], timeout];
 
 WebSocketConnection /: SocketReadMessage[connection_WebSocketConnection] := 
 Module[{
-    message = ByteArray[{}], firstPart, 
+    message, 
+    expectedLength, 
     socket = connection["Socket"], 
     decoded, 
     deserializer = connection["Deserializer"]
@@ -344,22 +345,37 @@ Module[{
         (*Return: $Failed*)
         $Failed, 
     (*Else*) 
-        
-        firstPart = SocketReadMessage[connection["Socket"]]; 
-        expectedLength = WebSocketPacketLength[<|"SourceSocket" -> socket, "DataByteArray" -> firstPart|>];
 
-        If[Length[firstPart] === expectedLength, 
-            decoded = decodeFrame[firstPart]; 
+        message = SocketReadMessage[connection["Socket"]]; 
+        expectedLength = WebSocketPacketLength[<|"SourceSocket" -> socket, "DataByteArray" -> message|>]; 
+
+        Which[
+            Length[message] === expectedLength, 
+            decoded = decodeFrame[message]; 
+            
             Which[
                 decoded["Opcode"] === "Text", deserializer @ ByteArrayToString @ decoded["Payload"], 
                 decoded["Opcode"] === "Binary", deserializer @ decoded["Payload"], 
-                True, firstPart
+                True, decoded["Payload"]
             ], 
-        (*Else*)
-            $Failed
+
+            Length[message] > expectedLength, 
+            {}, 
+
+            Length[message] < expectedLength, 
+                While[SocketReadyQ[client], 
+                    message = Join[message, SocketReadMessage[client]]; 
+                    If[Length[message] >= expectedLength, Break[]]
+                ]; 
+
+            
         ]
     ]
 ];
+
+
+WebSocketFrame[text_String] := 
+
 
 
 (*::Section::Close::*)
